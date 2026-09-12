@@ -61,6 +61,7 @@ import {
   type ConversationGroupId,
   type ConversationTopic,
 } from "@/lib/englishConversations";
+import { TranslateView } from "@/components/TranslateView";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -152,7 +153,7 @@ function touchStreak(): StreakData {
 export default function App() {
   const [learned, setLearned] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState<StreakData>({ current: 0, best: 0, lastDate: "" });
-  const [mode, setMode] = useState<"words" | "sentences" | "conversations" | "quiz">("words");
+  const [mode, setMode] = useState<"words" | "sentences" | "conversations" | "translate" | "quiz">("words");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedSentenceGroupId, setSelectedSentenceGroupId] = useState<string | null>(null);
   const [selectedConvGroupId, setSelectedConvGroupId] = useState<ConversationGroupId | null>(null);
@@ -259,12 +260,17 @@ export default function App() {
       </header>
 
       {!selectedAny && (
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "words" | "sentences" | "conversations" | "quiz")} className="mb-6">
-          <TabsList className="w-full grid grid-cols-4">
-            <TabsTrigger value="words" className="text-xs px-1.5">Words</TabsTrigger>
-            <TabsTrigger value="sentences" className="text-xs px-1.5">Sentences</TabsTrigger>
-            <TabsTrigger value="conversations" className="text-xs px-1.5">Talk</TabsTrigger>
-            <TabsTrigger value="quiz" className="text-xs px-1.5">Quiz</TabsTrigger>
+        <Tabs
+          value={mode}
+          onValueChange={(v) => setMode(v as "words" | "sentences" | "conversations" | "translate" | "quiz")}
+          className="mb-6"
+        >
+          <TabsList className="w-full grid grid-cols-5">
+            <TabsTrigger value="words" className="text-xs px-1">Words</TabsTrigger>
+            <TabsTrigger value="sentences" className="text-xs px-1">Sentences</TabsTrigger>
+            <TabsTrigger value="conversations" className="text-xs px-1">Talk</TabsTrigger>
+            <TabsTrigger value="translate" className="text-xs px-1">Translate</TabsTrigger>
+            <TabsTrigger value="quiz" className="text-xs px-1">Quiz</TabsTrigger>
           </TabsList>
         </Tabs>
       )}
@@ -458,6 +464,8 @@ export default function App() {
           </div>
         )
       )}
+
+      {mode === "translate" && <TranslateView />}
 
       {mode === "quiz" && <QuizView />}
     </main>
