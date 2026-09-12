@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ArrowLeftRight, Languages } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowLeftRight, Languages, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PronounceButton } from "@/components/PronounceButton";
 import { allItems } from "@/lib/englishLessons";
@@ -53,51 +53,72 @@ function searchTranslations(
     else if (value.startsWith(q)) startsWith.push(entry);
     else if (value.includes(q)) includes.push(entry);
   }
-  return [...exact, ...startsWith, ...includes].slice(0, 12);
+  return [...exact, ...startsWith, ...includes].slice(0, 6);
 }
 
-function wordByWordBreakdown(
-  index: TranslationEntry[],
-  query: string,
+// Free, key-less, CORS-enabled machine translation for any text beyond the app's own dictionary.
+// Anonymous usage is capped at 5000 words/day; passing an email (the app owner's) raises that to 50000/day.
+// See https://mymemory.translated.net/doc/spec.php
+const TRANSLATE_ATTRIBUTION_EMAIL = "hemant2959@gmail.com";
+
+async function fetchMachineTranslation(
+  text: string,
   direction: TranslateDirection,
-): TranslationEntry[] {
-  const words = query.trim().split(/\s+/).filter(Boolean);
-  if (words.length < 2) return [];
-  const field = fieldFor(direction);
-
-  const results: TranslationEntry[] = [];
-  const usedKeys = new Set<string>();
-  for (const word of words) {
-    const clean = direction === "en-to-odia" ? word.toLowerCase().replace(/[^a-z0-9]/g, "") : word;
-    if (!clean) continue;
-    const match =
-      index.find((entry) => normalize(entry[field], direction) === clean) ??
-      index.find((entry) => normalize(entry[field], direction).includes(clean));
-    if (!match) continue;
-    const key = match.en.toLowerCase();
-    if (usedKeys.has(key)) continue;
-    usedKeys.add(key);
-    results.push(match);
+  signal: AbortSignal,
+): Promise<string> {
+  const langpair = direction === "en-to-odia" ? "en|or" : "or|en";
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}&de=${encodeURIComponent(TRANSLATE_ATTRIBUTION_EMAIL)}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`Translation service returned ${res.status}`);
+  const data = await res.json();
+  const translated = data?.responseData?.translatedText;
+  if (typeof translated !== "string" || !translated || /^[A-Z ]+ LANGUAGE PAIR/.test(translated)) {
+    throw new Error("No translation returned");
   }
-  return results;
+  return translated;
 }
+
+type ApiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; text: string }
+  | { status: "error" };
 
 export function TranslateView() {
   const [direction, setDirection] = useState<TranslateDirection>("en-to-odia");
   const [text, setText] = useState("");
+  const [apiState, setApiState] = useState<ApiState>({ status: "idle" });
   const index = useMemo(buildTranslationIndex, []);
 
   const query = text.trim();
   const matches = useMemo(() => searchTranslations(index, query, direction), [index, query, direction]);
-  const breakdown = useMemo(
-    () => (matches.length === 0 ? wordByWordBreakdown(index, query, direction) : []),
-    [index, query, direction, matches.length],
-  );
+
+  useEffect(() => {
+    if (!query) {
+      setApiState({ status: "idle" });
+      return;
+    }
+    const controller = new AbortController();
+    setApiState({ status: "loading" });
+    const timer = setTimeout(() => {
+      fetchMachineTranslation(query, direction, controller.signal)
+        .then((translated) => setApiState({ status: "success", text: translated }))
+        .catch((err) => {
+          if ((err as Error)?.name !== "AbortError") setApiState({ status: "error" });
+        });
+    }, 450);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, direction]);
 
   const swapDirection = () => {
     setDirection((d) => (d === "en-to-odia" ? "odia-to-en" : "en-to-odia"));
     setText("");
   };
+
+  const englishText = direction === "en-to-odia" ? query : apiState.status === "success" ? apiState.text : "";
 
   return (
     <div>
@@ -120,7 +141,7 @@ export function TranslateView() {
       <Input
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={direction === "en-to-odia" ? "Type an English word or sentence…" : "ଏକ ଶବ୍ଦ କିମ୍ବା ବାକ୍ୟ ଟାଇପ୍ କରନ୍ତୁ…"}
+        placeholder={direction === "en-to-odia" ? "Type any English word or sentence…" : "ଯେକୌଣସି ଶବ୍ଦ କିମ୍ବା ବାକ୍ୟ ଟାଇପ୍ କରନ୍ତୁ…"}
         className="h-12 rounded-2xl text-base mb-4"
       />
 
@@ -130,65 +151,68 @@ export function TranslateView() {
             <Languages className="size-6 text-primary" />
           </div>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            Looks up your word or sentence in this app's {index.length}-entry dictionary of words, sentences, and
-            conversation lines. It isn't a general-purpose translator, so results are best for phrases already
-            taught in the Words, Sentences, and Talk tabs.
+            Translates any word or sentence, not just the ones taught in this app — it calls an online translator, so
+            it needs an internet connection. Phrases also taught in Words, Sentences, or Talk get a bonus Odia-script
+            pronunciation guide below the translation.
           </p>
         </div>
       )}
 
-      {query && matches.length > 0 && (
-        <ul className="space-y-2">
-          {matches.map((m, i) => (
-            <li key={`${m.en}-${i}`} className="rounded-2xl border bg-card px-4 py-3">
-              {direction === "en-to-odia" ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <span className="font-display font-semibold">{m.en}</span>
-                    <PronounceButton text={m.en} className="size-7" />
-                  </div>
-                  <div className="text-sm text-muted-foreground mt-0.5">
-                    {m.odiaMeaning} · <span className="italic">{m.odiaPhonetic}</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-display font-semibold">{m.odiaMeaning}</div>
-                  <div className="text-xs text-muted-foreground italic mb-1.5">{m.odiaPhonetic}</div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{m.en}</span>
-                    <PronounceButton text={m.en} className="size-7" />
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {query && (
+        <div className="rounded-2xl border bg-card px-4 py-4 mb-4">
+          {apiState.status === "loading" && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 className="size-4 animate-spin" />
+              Translating…
+            </div>
+          )}
 
-      {query && matches.length === 0 && breakdown.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">No exact phrase match — here's a word-by-word breakdown:</p>
-          <div className="flex flex-wrap gap-2">
-            {breakdown.map((b, i) => (
-              <div key={`${b.en}-${i}`} className="rounded-xl border bg-card px-3 py-2 text-sm flex items-center gap-2">
-                <div className="min-w-0">
-                  <div className="font-medium">{direction === "en-to-odia" ? b.en : b.odiaMeaning}</div>
-                  <div className="text-xs text-muted-foreground italic">
-                    {direction === "en-to-odia" ? b.odiaMeaning : b.en}
-                  </div>
-                </div>
-                <PronounceButton text={b.en} className="size-6 shrink-0" />
-              </div>
-            ))}
-          </div>
+          {apiState.status === "success" && (
+            <div className="flex items-start gap-2">
+              <span className="font-display text-lg font-bold flex-1 min-w-0">{apiState.text}</span>
+              {englishText && <PronounceButton text={englishText} className="size-8 shrink-0" />}
+            </div>
+          )}
+
+          {apiState.status === "error" && (
+            <div className="flex items-start gap-2 text-sm text-destructive">
+              <AlertTriangle className="size-4 shrink-0 mt-0.5" />
+              <span>Couldn't reach the online translator. Check your internet connection and try again.</span>
+            </div>
+          )}
         </div>
       )}
 
-      {query && matches.length === 0 && breakdown.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-8">
-          No match found in the dictionary yet. Try a simpler word, or browse the Words and Sentences tabs.
-        </p>
+      {query && matches.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Also taught in this app, with pronunciation:</p>
+          <ul className="space-y-2">
+            {matches.map((m, i) => (
+              <li key={`${m.en}-${i}`} className="rounded-2xl border bg-card px-4 py-3">
+                {direction === "en-to-odia" ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{m.en}</span>
+                      <PronounceButton text={m.en} className="size-7" />
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-0.5">
+                      {m.odiaMeaning} · <span className="italic">{m.odiaPhonetic}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-medium">{m.odiaMeaning}</div>
+                    <div className="text-xs text-muted-foreground italic mb-1.5">{m.odiaPhonetic}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{m.en}</span>
+                      <PronounceButton text={m.en} className="size-7" />
+                    </div>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
