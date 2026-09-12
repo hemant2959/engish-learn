@@ -468,7 +468,24 @@ export default function App() {
       {mode === "translate" && <TranslateView />}
 
       {mode === "quiz" && <QuizView />}
+
+      {!selectedAny && <Footer />}
     </main>
+  );
+}
+
+function Footer() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="mt-10 pt-4 border-t text-center text-[11px] text-muted-foreground">
+      <p>© {year} Learn English for Odia Speakers. All rights reserved.</p>
+      <p className="mt-1">
+        Support:{" "}
+        <a href="mailto:support@smartindia.pro" className="text-primary hover:underline">
+          support@smartindia.pro
+        </a>
+      </p>
+    </footer>
   );
 }
 
