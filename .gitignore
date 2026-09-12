@@ -3,6 +3,9 @@ dist
 dist-ssr
 *.local
 *.tsbuildinfo
+.env
+functions/node_modules
+functions/lib
 
 # Editor
 .vscode/*

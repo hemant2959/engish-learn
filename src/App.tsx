@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Apple,
@@ -29,6 +29,7 @@ import {
   PawPrint,
   Quote,
   Search,
+  Shield,
   ShoppingBag,
   ShoppingBasket,
   Smile,
@@ -63,6 +64,10 @@ import {
 } from "@/lib/englishConversations";
 import { TranslateView } from "@/components/TranslateView";
 import { cn } from "@/lib/utils";
+
+// Firebase pulls in a large SDK only needed by sign-up/admin, so keep it out of the main bundle.
+const SignupView = lazy(() => import("@/components/SignupView").then((m) => ({ default: m.SignupView })));
+const AdminView = lazy(() => import("@/components/AdminView").then((m) => ({ default: m.AdminView })));
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   alphabet: <Type className="size-5" />,
@@ -153,7 +158,8 @@ function touchStreak(): StreakData {
 export default function App() {
   const [learned, setLearned] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState<StreakData>({ current: 0, best: 0, lastDate: "" });
-  const [mode, setMode] = useState<"words" | "sentences" | "conversations" | "translate" | "quiz">("words");
+  const [mode, setMode] = useState<"words" | "sentences" | "conversations" | "translate" | "signup" | "quiz">("words");
+  const [showAdmin, setShowAdmin] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedSentenceGroupId, setSelectedSentenceGroupId] = useState<string | null>(null);
   const [selectedConvGroupId, setSelectedConvGroupId] = useState<ConversationGroupId | null>(null);
@@ -257,20 +263,32 @@ export default function App() {
             {streak.current}
           </div>
         )}
+        {!selectedAny && (
+          <button
+            onClick={() => setShowAdmin(true)}
+            aria-label="Admin"
+            className="size-9 rounded-xl grid place-items-center hover:bg-accent transition-colors shrink-0 text-muted-foreground"
+          >
+            <Shield className="size-4" />
+          </button>
+        )}
       </header>
 
       {!selectedAny && (
         <Tabs
           value={mode}
-          onValueChange={(v) => setMode(v as "words" | "sentences" | "conversations" | "translate" | "quiz")}
+          onValueChange={(v) =>
+            setMode(v as "words" | "sentences" | "conversations" | "translate" | "signup" | "quiz")
+          }
           className="mb-6"
         >
-          <TabsList className="w-full grid grid-cols-5">
-            <TabsTrigger value="words" className="text-xs px-1">Words</TabsTrigger>
-            <TabsTrigger value="sentences" className="text-xs px-1">Sentences</TabsTrigger>
-            <TabsTrigger value="conversations" className="text-xs px-1">Talk</TabsTrigger>
-            <TabsTrigger value="translate" className="text-xs px-1">Translate</TabsTrigger>
-            <TabsTrigger value="quiz" className="text-xs px-1">Quiz</TabsTrigger>
+          <TabsList className="w-full grid grid-cols-6">
+            <TabsTrigger value="words" className="text-[11px] px-0.5">Words</TabsTrigger>
+            <TabsTrigger value="sentences" className="text-[11px] px-0.5">Sentences</TabsTrigger>
+            <TabsTrigger value="conversations" className="text-[11px] px-0.5">Talk</TabsTrigger>
+            <TabsTrigger value="translate" className="text-[11px] px-0.5">Translate</TabsTrigger>
+            <TabsTrigger value="signup" className="text-[11px] px-0.5">Join</TabsTrigger>
+            <TabsTrigger value="quiz" className="text-[11px] px-0.5">Quiz</TabsTrigger>
           </TabsList>
         </Tabs>
       )}
@@ -467,9 +485,21 @@ export default function App() {
 
       {mode === "translate" && <TranslateView />}
 
+      {mode === "signup" && (
+        <Suspense fallback={<p className="text-sm text-muted-foreground text-center py-10">Loading…</p>}>
+          <SignupView />
+        </Suspense>
+      )}
+
       {mode === "quiz" && <QuizView />}
 
       {!selectedAny && <Footer />}
+
+      {showAdmin && (
+        <Suspense fallback={null}>
+          <AdminView onClose={() => setShowAdmin(false)} />
+        </Suspense>
+      )}
     </main>
   );
 }

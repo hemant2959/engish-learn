@@ -1,0 +1,22 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sign-up records: name, mobile number, and (optionally) a push notification token.
+    match /users/{userId} {
+      // Anyone can sign up: create a record with the required shape.
+      allow create: if request.resource.data.keys().hasAll(['name', 'mobile', 'createdAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.mobile is string
+        && request.resource.data.mobile.size() >= 7;
+
+      // A returning visitor may only refresh their own push token, nothing else.
+      allow update: if request.auth != null
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'updatedAt']);
+
+      // Reading the list (to notify people) and deleting records is admin-only.
+      allow read, delete: if request.auth != null;
+    }
+  }
+}
